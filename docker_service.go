@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 
 	"github.com/moby/moby/client"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 
@@ -92,4 +95,82 @@ func (a *App) StartContainer(id string)(client.ContainerStartResult, error) {
 func (a *App) StopContainer(id string)(client.ContainerStopResult, error){
 	CheckDockerClient(a.docker_client)
 	return a.docker_client.ContainerStop(a.ctx, id, client.ContainerStopOptions{})
+}
+
+func (a *App) listenToDockerEvents() {
+	if a.docker_client == nil {
+		return
+	}
+
+	result := a.docker_client.Events(a.ctx, client.EventsListOptions{})
+    
+	for {
+		select{
+		case err := <- result.Err:
+			if err != nil {
+				fmt.Printf("Docker event error: %v", err)
+				return
+			}
+		
+		case msg := <- result.Messages:
+			 if msg.Type == "container"{
+				fmt.Printf("Docker Container Event: %s\n", msg.Action)
+				runtime.EventsEmit(a.ctx, "docker-event", msg.Action)
+			 }
+		}
+	}
+	
+}
+
+func (a *App) StreamContainerLogs(id string) error{
+	CheckDockerClient(a.docker_client)
+
+	if a.cancelLogStream != nil {
+		a.cancelLogStream()
+	}
+
+	logCtx, cancel := context.WithCancel(a.ctx)
+    a.cancelLogStream = cancel
+
+	reader, err := a.docker_client.ContainerLogs(logCtx, id, client.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow: true,
+		Tail:  "50",
+	})
+
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	go func() {
+      defer reader.Close()
+	  
+	  scanner:= bufio.NewScanner(reader)
+
+	  for scanner.Scan() {
+		
+ 		line := scanner.Text()
+
+		if len(line) > 8 {
+			line = line[8:] 
+		}
+		runtime.EventsEmit(a.ctx, "container-log-line", line)
+	  }
+
+	  if err := scanner.Err(); err != nil {
+		runtime.EventsEmit(a.ctx, "container-log-error", err.Error())
+	 }
+	}()
+
+	return nil
+}
+
+
+func (a *App) StopContainerLogs(){
+	if a.cancelLogStream != nil {
+		a.cancelLogStream()
+		a.cancelLogStream = nil
+	}
 }

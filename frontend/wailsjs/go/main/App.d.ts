@@ -12,3 +12,7 @@ export function ListContainers():Promise<Array<main.ContainerItem>>;
 export function StartContainer(arg1:string):Promise<client.ContainerStartResult>;
 
 export function StopContainer(arg1:string):Promise<client.ContainerStopResult>;
+
+export function StopContainerLogs():Promise<void>;
+
+export function StreamContainerLogs(arg1:string):Promise<void>;

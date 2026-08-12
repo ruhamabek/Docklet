@@ -21,3 +21,11 @@ export function StartContainer(arg1) {
 export function StopContainer(arg1) {
   return window['go']['main']['App']['StopContainer'](arg1);
 }
+
+export function StopContainerLogs() {
+  return window['go']['main']['App']['StopContainerLogs']();
+}
+
+export function StreamContainerLogs(arg1) {
+  return window['go']['main']['App']['StreamContainerLogs'](arg1);
+}
