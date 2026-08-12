@@ -2,8 +2,9 @@
 import Image from "next/image";
 import { Button } from "@/components/ui/button"
 import { GetDockerInfo, Greet, ListContainers, StartContainer, StopContainer } from "@wailsjs/go/main/App"
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { EventsOn } from "@wailsjs/runtime/runtime";
 export default function Home() {
   const [resultText, setResultText] = useState("Please enter your name below 👇");
   const [name, setName] = useState('');
@@ -44,6 +45,14 @@ export default function Home() {
       })
       .catch(err => alert("Failed to start: " + err))
   }
+
+  useEffect(()=> {
+    const unsubscribe = EventsOn("docker-event", (action)=> {
+       getContainers();
+    });
+
+    return () => unsubscribe();
+  }, [])
 
 
 
