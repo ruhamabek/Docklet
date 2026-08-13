@@ -1,24 +1,58 @@
 "use client";
 import Image from "next/image";
 import { Button } from "@/components/ui/button"
-import { GetDockerInfo, Greet, ListContainers, StartContainer, StopContainer, StopContainerLogs, StreamContainerLogs } from "@wailsjs/go/main/App"
+import { GetDockerInfo, Greet, ListContainers, ListImages, PullImages, RemoveContainer, RemoveImage, StartContainer, StopContainer, StopContainerLogs, StreamContainerLogs } from "@wailsjs/go/main/App"
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { EventsOn } from "@wailsjs/runtime/runtime";
 export default function Home() {
+  
+type activeTab = 'containers' | 'images'; 
+interface ContainerItem {
+  id: string;
+  name: string;
+  image: string;
+  command: string;
+  created: number;
+  state: string;
+  status: string;
+  ports: string[];
+}
+interface ImageItem {
+  id: string;
+  repository: string;
+  tag: string;
+  size: string;
+  created: number;
+}
+interface PullProgress {
+  id: string;
+  status: string;
+  progress: string;
+}
+
+
   const [resultText, setResultText] = useState("Please enter your name below 👇");
   const [name, setName] = useState('');
   const [status , setStatus] = useState('')
-  const [containers, setContainers] = useState<any[]>([])
+  const [containers, setContainers] = useState<ContainerItem[]>([])
+  const [images, setImages] = useState<ImageItem[]>([])
   const [activeLogContainer, setActiveLogContainer] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<activeTab>()
+  const [isPullModalOpen, setIsPullModalOpen] = useState(false);
+  const [imageToPull, setImageToPull] = useState('');
+  const [isPulling, setIsPulling] = useState(false);
+  const [layerProgress, setLayerProgress] = useState<Record<string, PullProgress>>({});
+
   useEffect(() => {
     if (logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
   }, [logs]);
-   function openLogs(containerId: string) {
+
+function openLogs(containerId: string) {
     setActiveLogContainer(containerId);
     setLogs([]);  
      StreamContainerLogs(containerId)
@@ -28,7 +62,7 @@ export default function Home() {
     });
      return unsubscribe;
   }
-   function closeLogs() {
+function closeLogs() {
     StopContainerLogs();
     setActiveLogContainer(null);
     setLogs([]);
@@ -54,6 +88,12 @@ export default function Home() {
         .catch(err => setStatus(`Error: ${err.message}`));
   }
 
+   function getImages() {
+    ListImages()
+      .then((data) => setImages(data || []))
+      .catch((err) => setStatus(`Error: ${err.message}`));
+  }
+
   function handleStart(id: string){
       StartContainer(id)
       .then(() => {
@@ -70,20 +110,77 @@ export default function Home() {
       .catch(err => alert("Failed to start: " + err))
   }
 
+  function handlePullImage() {
+    if (!imageToPull.trim()) return;
+    setIsPulling(true);
+    setLayerProgress({});  
+     const unsubProgress = EventsOn("image-pull-progress", (data: any) => {
+      if (data.id) {
+        setLayerProgress((prev) => ({
+          ...prev,
+          [data.id]: data,  
+        }));
+      }
+    });
+     PullImages(imageToPull)
+      .then(() => {
+        setIsPulling(false);
+        unsubProgress();
+        getImages();  
+        alert(`Successfully pulled image: ${imageToPull}`);
+        setIsPullModalOpen(false);
+        setImageToPull('');
+      })
+      .catch((err) => {
+        setIsPulling(false);
+        unsubProgress();
+        alert("Failed to pull image: " + err);
+      });
+  }
+
+  function handleRemoveImage(id: string, repo: string) {
+  if (confirm(`Are you sure you want to delete image "${repo}" (${id})?`)) {
+    RemoveImage(id)
+      .then((result) => {
+         console.log("Deleted Image layers:", result);  
+        getImages();  
+      })
+      .catch((err) => {
+        alert("Failed to remove image: " + err);
+      });
+  }
+}
+
+  function handleRemoveContainer(id: string, name: string) {
+  if (confirm(`Are you sure you want to remove this contaainner "${name}" (${id})?`)) {
+    RemoveContainer(id)
+      .then((result) => {
+         console.log("Deleted container:", result);  
+         getContainers();  
+      })
+      .catch((err) => {
+        alert("Failed to remove container: " + err);
+      });
+  }
+}
+
   useEffect(()=> {
-    const unsubscribe = EventsOn("docker-event", (action)=> {
+    const unsubscribe = EventsOn("docker-event", ()=> {
        getContainers();
     });
 
-    return () => unsubscribe();
+    const unsubErrors = EventsOn("container-log-error", (errorMessage: string) => {
+     setLogs((prev) => [...prev, `❌ [SYSTEM ERROR]: ${errorMessage}`]);
+    });
+     return () => {
+      unsubscribe();
+      unsubErrors();
+    };
   }, [])
-
-
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-
         <div>
           <div id="result" className="result">{resultText}</div>
           <div id="input" className="flex">
@@ -154,21 +251,7 @@ export default function Home() {
           />
           Learn
         </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
+        
         <a
           className="flex items-center gap-2 hover:underline hover:underline-offset-4"
           href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
@@ -220,6 +303,13 @@ export default function Home() {
               <Button variant="outline" onClick={() => openLogs(c.id)}>
                 Logs 📜
               </Button>
+                <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => handleRemoveContainer(c.id, c.name)}
+                  >
+                    Delete 🗑️
+               </Button> 
               {activeLogContainer && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
                   <div className="bg-slate-900 border border-slate-700 w-full max-w-4xl rounded-xl p-4 flex flex-col gap-3 shadow-2xl">
@@ -254,6 +344,126 @@ export default function Home() {
           </div>     
           <div>
         </div>
+        <div className="flex gap-2 border-b border-slate-700 w-full max-w-4xl pb-2 mb-4">
+          <button
+            className={`px-4 py-2 font-bold rounded-lg transition ${
+              activeTab === 'containers' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('containers')}
+          >
+            Containers 📦 ({containers.length})
+          </button>
+
+          <button
+            className={`px-4 py-2 font-bold rounded-lg transition ${
+              activeTab === 'images' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+            onClick={() => {
+              setActiveTab('images');
+              getImages();
+            }}
+          >
+            Images 🖼️ ({images.length})
+          </button>
+        </div>
+       {activeTab === 'images' && (
+          <div className="flex flex-col gap-3 w-full max-w-4xl">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">Downloaded Images ({images.length})</h2>
+              <div className="flex gap-2">
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsPullModalOpen(true)}>
+                  Pull Image 📥
+                </Button>
+                <Button onClick={getImages}>Refresh 🔄</Button>
+              </div>
+         </div>
+          {images.length === 0 ? (
+            <p className="text-slate-400">No images downloaded.</p>
+          ) : (
+            <div className="border border-slate-700 rounded-xl overflow-hidden bg-slate-900">
+              <table className="w-full text-left text-sm text-slate-200">
+                <thead className="bg-slate-800 text-slate-400 font-mono text-xs uppercase border-b border-slate-700">
+                  <tr>
+                    <th className="p-3">Repository</th>
+                    <th className="p-3">Tag</th>
+                    <th className="p-3">Image ID</th>
+                    <th className="p-3">Size</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {images.map((img) => (
+                    <tr key={img.id} className="hover:bg-slate-800/50 transition">
+                      <td className="p-3 font-bold text-white">{img.repository}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 bg-blue-900/80 text-blue-300 rounded font-mono text-xs border border-blue-700">
+                          {img.tag}
+                        </span>
+                         <td className="p-3">
+                            <Button 
+                              variant="destructive" 
+                              size="sm" 
+                              onClick={() => handleRemoveImage(img.id, img.repository)}
+                            >
+                              Delete 🗑️
+                            </Button>
+                          </td>
+                      </td>
+                      <td className="p-3 font-mono text-xs text-slate-400">{img.id}</td>
+                      <td className="p-3 font-mono text-xs text-green-400">{img.size}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    {isPullModalOpen && (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+        <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-xl p-6 flex flex-col gap-4 shadow-2xl">
+          
+          <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+            <h3 className="text-lg font-bold text-white">Pull Image from Docker Hub</h3>
+            {!isPulling && (
+              <Button size="sm" variant="ghost" onClick={() => setIsPullModalOpen(false)}>✖</Button>
+            )}
+          </div>
+
+           <div className="flex gap-2">
+            <Input 
+              placeholder="e.g. redis:alpine, postgres:alpine, nginx" 
+              value={imageToPull}
+              onChange={(e) => setImageToPull(e.target.value)}
+              disabled={isPulling}
+              className="bg-slate-800 border-slate-700 text-white"
+            />
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700" 
+              onClick={handlePullImage}
+              disabled={isPulling || !imageToPull.trim()}
+            >
+              {isPulling ? "Pulling..." : "Pull 📥"}
+            </Button>
+          </div>
+           {Object.keys(layerProgress).length > 0 && (
+            <div className="flex flex-col gap-2 bg-slate-950 p-3 rounded-lg border border-slate-800 max-h-60 overflow-y-auto font-mono text-xs">
+              {Object.values(layerProgress).map((layer) => (
+                <div key={layer.id} className="flex justify-between items-center border-b border-slate-900 pb-1">
+                  <span className="text-slate-400 font-bold">{layer.id}</span>
+                  <span className="text-blue-400">{layer.status}</span>
+                  <span className="text-slate-500 text-[10px]">{layer.progress}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
+        </div>
+        )}
+      
       </footer>
     </div>
   );

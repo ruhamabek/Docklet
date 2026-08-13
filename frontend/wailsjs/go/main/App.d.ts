@@ -9,6 +9,14 @@ export function Greet(arg1:string):Promise<string>;
 
 export function ListContainers():Promise<Array<main.ContainerItem>>;
 
+export function ListImages():Promise<Array<main.ImageItem>>;
+
+export function PullImages(arg1:string):Promise<void>;
+
+export function RemoveContainer(arg1:string):Promise<client.ContainerRemoveResult>;
+
+export function RemoveImage(arg1:string):Promise<client.ImageRemoveResult>;
+
 export function StartContainer(arg1:string):Promise<client.ContainerStartResult>;
 
 export function StopContainer(arg1:string):Promise<client.ContainerStopResult>;

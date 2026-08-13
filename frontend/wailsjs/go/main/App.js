@@ -14,6 +14,22 @@ export function ListContainers() {
   return window['go']['main']['App']['ListContainers']();
 }
 
+export function ListImages() {
+  return window['go']['main']['App']['ListImages']();
+}
+
+export function PullImages(arg1) {
+  return window['go']['main']['App']['PullImages'](arg1);
+}
+
+export function RemoveContainer(arg1) {
+  return window['go']['main']['App']['RemoveContainer'](arg1);
+}
+
+export function RemoveImage(arg1) {
+  return window['go']['main']['App']['RemoveImage'](arg1);
+}
+
 export function StartContainer(arg1) {
   return window['go']['main']['App']['StartContainer'](arg1);
 }
