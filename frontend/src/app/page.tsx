@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { Button } from "@/components/ui/button"
-import { GetDockerInfo, Greet, ListContainers, ListImages, PullImages, RemoveContainer, RemoveImage, StartContainer, StopContainer, StopContainerLogs, StreamContainerLogs } from "@wailsjs/go/main/App"
+import { GetDockerInfo, Greet, ListContainers, ListImages, PullImages, RemoveContainer, RemoveImage, RunImage, StartContainer, StopContainer, StopContainerLogs, StopContainerStats, StreamContainerLogs, StreamContainerResponse } from "@wailsjs/go/main/App"
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { EventsOn } from "@wailsjs/runtime/runtime";
@@ -30,8 +30,22 @@ interface PullProgress {
   status: string;
   progress: string;
 }
+interface RunImageOptions {
+  imageName: string;
+  containerName: string;
+  hostPort: string;
+  containerPort: string;
+}
 
-
+interface ContainerStatsData {
+  containerId: string;
+  cpuPercent: number;
+  memoryUsageMB: number;
+  memoryLimitMB: number;
+  memoryPercent: number;
+  memoryHuman: string;
+}
+  
   const [resultText, setResultText] = useState("Please enter your name below 👇");
   const [name, setName] = useState('');
   const [status , setStatus] = useState('')
@@ -45,6 +59,69 @@ interface PullProgress {
   const [imageToPull, setImageToPull] = useState('');
   const [isPulling, setIsPulling] = useState(false);
   const [layerProgress, setLayerProgress] = useState<Record<string, PullProgress>>({});
+  const [selectedImageForRun, setSelectedImageForRun] = useState<ImageItem | null>(null);
+  const [runContainerName, setRunContainerName] = useState('');
+  const [runHostPort, setRunHostPort] = useState('');
+  const [runContainerPort, setRunContainerPort] = useState('');
+  const [isRunningImage, setIsRunningImage] = useState(false);
+  const [activeStatsContainer, setActiveStatsContainer] = useState<ContainerItem | null>(null);
+  const [liveStats, setLiveStats] = useState<ContainerStatsData | null>(null);
+
+  // Open Stats Stream
+  function openStats(c: ContainerItem) {
+    setActiveStatsContainer(c);
+    setLiveStats(null);
+     StreamContainerResponse(c.id)
+      .catch((err) => alert("Failed to stream stats: " + err));
+
+     const unsubStats = EventsOn("container-stats-update", (data: ContainerStatsData) => {
+      setLiveStats(data);
+    });
+
+    return unsubStats;
+  }
+
+   function closeStats() {
+    StopContainerStats(); 
+    setActiveStatsContainer(null);
+    setLiveStats(null);
+  }
+
+   function openRunModal(img: ImageItem) {
+    setSelectedImageForRun(img);
+    setRunContainerName('');
+    setRunHostPort('');
+    setRunContainerPort('');
+  }
+
+ function handleLaunchContainer() {
+  if (!selectedImageForRun) return;
+
+  setIsRunningImage(true);
+
+  const fullImageTag = selectedImageForRun.tag !== '<none>'
+    ? `${selectedImageForRun.repository}:${selectedImageForRun.tag}`
+    : selectedImageForRun.id;
+  const payload: RunImageOptions = {
+    imageName: fullImageTag,
+    containerName: runContainerName.trim(),
+    hostPort: runHostPort.trim(),
+    containerPort: runContainerPort.trim(),
+  };
+
+  RunImage(payload)
+    .then(() => {
+      setIsRunningImage(false);
+      setSelectedImageForRun(null);
+      alert(`Container launched successfully! 🚀`);
+      setActiveTab('containers');
+      getContainers();
+    })
+    .catch((err) => {
+      setIsRunningImage(false);
+      alert("Failed to launch container: " + err);
+    });
+}
 
   useEffect(() => {
     if (logContainerRef.current) {
@@ -299,7 +376,85 @@ function closeLogs() {
                     Start ▶️
                   </Button>
                 )}
-              </div>
+                {c.state === 'running' && (
+                  <Button 
+                    size="sm" 
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                    onClick={() => openStats(c)}
+                  >
+                    Stats 📊
+                  </Button>
+                )}
+                 </div>
+                   {activeStatsContainer && (
+                    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+                      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-xl p-6 flex flex-col gap-6 shadow-2xl">
+                        
+                        {/* Header */}
+                        <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+                          <div>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                              Live Performance Metrics
+                            </h3>
+                            <p className="text-xs text-slate-400 font-mono">
+                              Container: {activeStatsContainer.name} ({activeStatsContainer.id})
+                            </p>
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={closeStats}>✖</Button>
+                        </div>
+
+                        {!liveStats ? (
+                          <div className="p-8 text-center text-slate-400 italic">
+                            Connecting to container metrics stream...
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-5">
+                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-semibold text-slate-300">⚡ CPU Usage</span>
+                                <span className="font-mono text-lg font-bold text-blue-400">
+                                  {liveStats.cpuPercent.toFixed(2)}%
+                                </span>
+                              </div>
+                               <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div 
+                                  className={`h-full transition-all duration-500 ${
+                                    liveStats.cpuPercent > 80 ? 'bg-red-500' : liveStats.cpuPercent > 50 ? 'bg-yellow-500' : 'bg-blue-500'
+                                  }`}
+                                  style={{ width: `${Math.min(liveStats.cpuPercent, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-semibold text-slate-300">💾 Memory (RAM)</span>
+                                <span className="font-mono text-lg font-bold text-purple-400">
+                                  {liveStats.memoryPercent.toFixed(2)}%
+                                </span>
+                              </div>
+                               <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div 
+                                  className="bg-purple-500 h-full transition-all duration-500"
+                                  style={{ width: `${Math.min(liveStats.memoryPercent, 100)}%` }}
+                                />
+                              </div>
+                              <div className="text-right font-mono text-xs text-slate-400">
+                                {liveStats.memoryHuman}
+                              </div>
+                            </div>
+
+                          </div>
+                        )}
+
+                         <div className="flex justify-end border-t border-slate-800 pt-3">
+                          <Button variant="outline" size="sm" onClick={closeStats}>Close</Button>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
               <Button variant="outline" onClick={() => openLogs(c.id)}>
                 Logs 📜
               </Button>
@@ -395,27 +550,34 @@ function closeLogs() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {images.map((img) => (
-                    <tr key={img.id} className="hover:bg-slate-800/50 transition">
-                      <td className="p-3 font-bold text-white">{img.repository}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 bg-blue-900/80 text-blue-300 rounded font-mono text-xs border border-blue-700">
-                          {img.tag}
-                        </span>
-                         <td className="p-3">
-                            <Button 
-                              variant="destructive" 
-                              size="sm" 
-                              onClick={() => handleRemoveImage(img.id, img.repository)}
-                            >
-                              Delete 🗑️
-                            </Button>
-                          </td>
-                      </td>
-                      <td className="p-3 font-mono text-xs text-slate-400">{img.id}</td>
-                      <td className="p-3 font-mono text-xs text-green-400">{img.size}</td>
-                    </tr>
-                  ))}
+           {images.map((img) => (
+  <tr key={img.id} className="hover:bg-slate-800/50 transition">
+    <td className="p-3 font-bold text-white">{img.repository}</td>
+    <td className="p-3">
+      <span className="px-2 py-0.5 bg-blue-900/80 text-blue-300 rounded font-mono text-xs border border-blue-700">
+        {img.tag}
+      </span>
+    </td>
+    <td className="p-3 font-mono text-xs text-slate-400">{img.id}</td>
+    <td className="p-3 font-mono text-xs text-green-400">{img.size}</td>
+    <td className="p-3 flex gap-2">
+      <Button 
+        size="sm" 
+        className="bg-green-600 hover:bg-green-700 text-white"
+        onClick={() => openRunModal(img)}
+      >
+        Run ▶️
+      </Button>
+      <Button 
+        variant="destructive" 
+        size="sm" 
+        onClick={() => handleRemoveImage(img.id, img.repository)}
+      >
+        Delete 🗑️
+      </Button>
+    </td>
+  </tr>
+))}
                 </tbody>
               </table>
             </div>
@@ -463,7 +625,73 @@ function closeLogs() {
           </div>
         </div>
         )}
-      
+   {selectedImageForRun && (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+        <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-xl p-6 flex flex-col gap-4 shadow-2xl">
+                <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+            <div>
+              <h3 className="text-lg font-bold text-white">Run Container</h3>
+              <p className="text-xs text-slate-400 font-mono">
+                Image: {selectedImageForRun.repository}:{selectedImageForRun.tag}
+              </p>
+            </div>
+            {!isRunningImage && (
+              <Button size="sm" variant="ghost" onClick={() => setSelectedImageForRun(null)}>✖</Button>
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="text-xs text-slate-400 font-medium block mb-1">Container Name (Optional)</label>
+              <Input 
+                placeholder="e.g. my-custom-app" 
+                value={runContainerName}
+                onChange={(e) => setRunContainerName(e.target.value)}
+                disabled={isRunningImage}
+                className="bg-slate-800 border-slate-700 text-white text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-400 font-medium block mb-1">Host Port (e.g. 8080)</label>
+                <Input 
+                  placeholder="8080" 
+                  value={runHostPort}
+                  onChange={(e) => setRunHostPort(e.target.value)}
+                  disabled={isRunningImage}
+                  className="bg-slate-800 border-slate-700 text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-medium block mb-1">Container Port (e.g. 80)</label>
+                <Input 
+                  placeholder="80" 
+                  value={runContainerPort}
+                  onChange={(e) => setRunContainerPort(e.target.value)}
+                  disabled={isRunningImage}
+                  className="bg-slate-800 border-slate-700 text-white text-sm"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button 
+              variant="ghost" 
+              onClick={() => setSelectedImageForRun(null)}
+              disabled={isRunningImage}
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white font-bold" 
+              onClick={handleLaunchContainer}
+              disabled={isRunningImage}
+            >
+              {isRunningImage ? "Launching..." : "Launch Container 🚀"}
+            </Button>
+          </div>
+        </div>
+      </div>
+      )}     
       </footer>
     </div>
   );

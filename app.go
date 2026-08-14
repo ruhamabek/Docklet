@@ -11,6 +11,7 @@ import (
 	ctx context.Context
 	docker_client *client.Client
 	cancelLogStream context.CancelFunc
+	cancelStatsStream context.CancelFunc
 }
 
  func NewApp() *App {

@@ -30,6 +30,10 @@ export function RemoveImage(arg1) {
   return window['go']['main']['App']['RemoveImage'](arg1);
 }
 
+export function RunImage(arg1) {
+  return window['go']['main']['App']['RunImage'](arg1);
+}
+
 export function StartContainer(arg1) {
   return window['go']['main']['App']['StartContainer'](arg1);
 }
@@ -42,6 +46,14 @@ export function StopContainerLogs() {
   return window['go']['main']['App']['StopContainerLogs']();
 }
 
+export function StopContainerStats() {
+  return window['go']['main']['App']['StopContainerStats']();
+}
+
 export function StreamContainerLogs(arg1) {
   return window['go']['main']['App']['StreamContainerLogs'](arg1);
+}
+
+export function StreamContainerResponse(arg1) {
+  return window['go']['main']['App']['StreamContainerResponse'](arg1);
 }

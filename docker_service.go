@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"strings"
-
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -36,6 +38,22 @@ type PullProgress struct{
 	ID string `json:"id"`
 	Status string `json:"status"`
     Progress string `json:"progress"`
+}
+
+type RunImageOptions struct {
+	ImageName     string `json:"imageName"`      
+	ContainerName string `json:"containerName"`  
+	HostPort      string `json:"hostPort"`      
+	ContainerPort string `json:"containerPort"` 
+}
+
+type ContainerStatsData struct {
+	ContainerID   string  `json:"containerId"`
+	CPUPercent    float64 `json:"cpuPercent"`   
+	MemoryUsageMB float64 `json:"memoryUsageMB"` 
+	MemoryLimitMB float64 `json:"memoryLimitMB"` 
+	MemoryPercent float64 `json:"memoryPercent"`  
+	MemoryHuman   string  `json:"memoryHuman"`    
 }
 
  func formatBytes(bytes int64) string {
@@ -86,11 +104,8 @@ func (a *App) ListContainers()([]ContainerItem , error){
 
 	  for _,c := range rawContainers.Items {
            name := "unamed"
-		   if len(c.Names) > 0 {
-			   name := c.Names[0]
-			   if len(name) > 0 && name[0] == '/'{
-                    name = name[1:]
-			   } 
+		   if len(c.Names) > 0 && c.Names[0] != "" {
+			name = strings.TrimPrefix(c.Names[0], "/")
 		   }
 
 		   var formattedPorts []string
@@ -257,7 +272,7 @@ func (a *App) PullImages(imageName string)error{
 		return fmt.Errorf("Image name cant be empty")
 	}
 
-	reader, err := a.docker_client.ImagePull(a.ctx, imageName, client.ImagePullOptions{All: true})
+	reader, err := a.docker_client.ImagePull(a.ctx, imageName, client.ImagePullOptions{All: false})
 	if err != nil {
 		return err
 	}
@@ -300,7 +315,159 @@ func (a *App) RemoveImage(id string) (client.ImageRemoveResult, error){
 	CheckDockerClient(a.docker_client)
 
 	return a.docker_client.ImageRemove(a.ctx, id, client.ImageRemoveOptions{
-		Force: false,
+		Force:         true, 
+		PruneChildren: true,
 	})
 }
 
+func (a *App) RunImage(opts RunImageOptions)error {
+	CheckDockerClient(a.docker_client)
+
+	portBindings := network.PortMap{}
+	exposedPorts := network.PortSet{}
+
+	if opts.ContainerPort != "" && opts.HostPort != "" {
+		cPort,err := network.ParsePort(opts.ContainerPort + "/tcp")
+		if err != nil {
+			return fmt.Errorf("invalid container port: %w", err)
+		}
+		exposedPorts[cPort] = struct{}{}
+		hostIP, _ := netip.ParseAddr("0.0.0.0")
+		portBindings[cPort] = []network.PortBinding{
+			{
+				HostIP: hostIP,
+				HostPort: opts.HostPort,
+			},
+		}
+	}
+
+	containerConfig := &container.Config{
+		  Image: opts.ImageName,
+		  ExposedPorts: exposedPorts,
+	}
+
+	hostConfig := &container.HostConfig{
+		PortBindings: portBindings,
+	}
+
+	resp, err := a.docker_client.ContainerCreate(
+		a.ctx,
+	    client.ContainerCreateOptions{
+			Name: opts.ContainerName,
+			Config : containerConfig,
+			HostConfig:  hostConfig,
+	  },
+	)
+
+	if err != nil {
+		return fmt.Errorf("Failed to create container: %v", err)
+	}
+
+	_, err = a.docker_client.ContainerStart(a.ctx, resp.ID, client.ContainerStartOptions{})
+    
+	if err != nil {
+		return fmt.Errorf("Problem with container starting: %v", err)
+	}
+
+	return nil
+
+}
+
+func (a *App) StreamContainerResponse(id string) error {
+	CheckDockerClient(a.docker_client)
+
+	if a.cancelStatsStream != nil {
+		a.cancelLogStream()
+	}
+
+	statCtx, cancel := context.WithCancel(a.ctx)
+
+	a.cancelStatsStream = cancel
+
+	res, err := a.docker_client.ContainerStats(statCtx,id, client.ContainerStatsOptions{
+		Stream: true,
+	})
+
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	go func(){
+		defer res.Body.Close()
+		decoder := json.NewDecoder(res.Body)	
+		var prevCPU uint64
+		var prevSystem uint64
+		for {
+			select{
+			case <- statCtx.Done():
+				return
+			default:
+               var v struct {
+					CPUStats struct {
+						CPUUsage struct {
+							TotalUsage uint64 `json:"total_usage"`
+						} `json:"cpu_usage"`
+						SystemUsage uint64 `json:"system_cpu_usage"`
+						OnlineCPUs  uint32 `json:"online_cpus"`
+					} `json:"cpu_stats"`
+					PreCPUStats struct {
+						CPUUsage struct {
+							TotalUsage uint64 `json:"total_usage"`
+						} `json:"cpu_usage"`
+						SystemUsage uint64 `json:"system_cpu_usage"`
+					} `json:"precpu_stats"`
+					MemoryStats struct {
+						Usage uint64 `json:"usage"`
+						Limit uint64 `json:"limit"`
+					} `json:"memory_stats"`
+		      }
+
+			  	if err := decoder.Decode(&v); err != nil {
+                return 
+		      }
+			  var cpuPercent float64
+		      cpuDelta := float64(v.CPUStats.CPUUsage.TotalUsage) - float64(prevCPU)
+			  systemDelta := float64(v.CPUStats.SystemUsage) - float64(prevSystem)
+              onlineCpus := float64(v.CPUStats.OnlineCPUs)
+             
+			  if onlineCpus == 0.0{
+				  onlineCpus = 1.0
+			  }
+
+			  if systemDelta > 0.0 && cpuDelta > 0 {
+				 cpuPercent = (cpuDelta / systemDelta) * onlineCpus * 100.0
+			  }
+			  prevCPU = v.CPUStats.CPUUsage.TotalUsage
+			  prevSystem = v.CPUStats.SystemUsage
+
+			  memUsageMB := float64(v.MemoryStats.Usage) / (1024.0 * 1024.0)
+			  memLimitMB := float64(v.MemoryStats.Limit) / (1024.0 * 1024.0)
+			  var memPercent float64
+			  if memLimitMB > 0 {
+					memPercent = (memUsageMB / memLimitMB) * 100.0
+				}
+
+		      memHuman := fmt.Sprintf("%.1f MB / %.1f GB", memUsageMB, memLimitMB/1024.0)
+              runtime.EventsEmit(a.ctx, "container-stats-update", ContainerStatsData{
+					ContainerID:   id,
+					CPUPercent:    cpuPercent,
+					MemoryUsageMB: memUsageMB,
+					MemoryLimitMB: memLimitMB,
+					MemoryPercent: memPercent,
+					MemoryHuman:   memHuman,
+				})
+
+			}
+		}		
+	}()
+
+ return nil
+}
+
+func (a *App) StopContainerStats() {
+	if a.cancelStatsStream != nil {
+		a.cancelStatsStream()
+		a.cancelStatsStream = nil
+  }
+}

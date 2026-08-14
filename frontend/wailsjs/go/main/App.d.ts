@@ -17,10 +17,16 @@ export function RemoveContainer(arg1:string):Promise<client.ContainerRemoveResul
 
 export function RemoveImage(arg1:string):Promise<client.ImageRemoveResult>;
 
+export function RunImage(arg1:main.RunImageOptions):Promise<void>;
+
 export function StartContainer(arg1:string):Promise<client.ContainerStartResult>;
 
 export function StopContainer(arg1:string):Promise<client.ContainerStopResult>;
 
 export function StopContainerLogs():Promise<void>;
 
+export function StopContainerStats():Promise<void>;
+
 export function StreamContainerLogs(arg1:string):Promise<void>;
+
+export function StreamContainerResponse(arg1:string):Promise<void>;

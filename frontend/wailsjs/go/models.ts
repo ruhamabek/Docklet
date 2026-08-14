@@ -138,6 +138,24 @@ export namespace main {
 	        this.created = source["created"];
 	    }
 	}
+	export class RunImageOptions {
+	    imageName: string;
+	    containerName: string;
+	    hostPort: string;
+	    containerPort: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RunImageOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.imageName = source["imageName"];
+	        this.containerName = source["containerName"];
+	        this.hostPort = source["hostPort"];
+	        this.containerPort = source["containerPort"];
+	    }
+	}
 
 }
 
