@@ -14,70 +14,6 @@ import (
 )
 
 
-type ContainerItem struct{
-	ID string `json:"id"`
-	Name string `json:"name"`
-	Image string `json:"image"`
-	Status string `json:"status"`
-	Command string `json:"command"`
-	Created int64 `json:"created"`
-	State string `json:"state"`
-	Ports []string `json:"ports"`
-}
-
-type ImageItem struct {
-	ID string `json:"id"`
-	Repository string `json:"repository"`
-	Tag string `json:"tag"`
-	Size string `json:"size"`
-	SizeBytes int64 `json:"SizeBytes"`
-	Created int64 `json:"created"`
-}
-
-type PullProgress struct{
-	ID string `json:"id"`
-	Status string `json:"status"`
-    Progress string `json:"progress"`
-}
-
-type RunImageOptions struct {
-	ImageName     string `json:"imageName"`      
-	ContainerName string `json:"containerName"`  
-	HostPort      string `json:"hostPort"`      
-	ContainerPort string `json:"containerPort"` 
-}
-
-type ContainerStatsData struct {
-	ContainerID   string  `json:"containerId"`
-	CPUPercent    float64 `json:"cpuPercent"`   
-	MemoryUsageMB float64 `json:"memoryUsageMB"` 
-	MemoryLimitMB float64 `json:"memoryLimitMB"` 
-	MemoryPercent float64 `json:"memoryPercent"`  
-	MemoryHuman   string  `json:"memoryHuman"`    
-}
-
- func formatBytes(bytes int64) string {
-	b := float64(bytes)
-	if b < 1024 {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	if b < 1024*1024 {
-		return fmt.Sprintf("%.1f KB", b/1024.0)
-	}
-	if b < 1024*1024*1024 {
-		return fmt.Sprintf("%.1f MB", b/(1024.0*1024.0))
-	}
-	return fmt.Sprintf("%.2f GB", b/(1024.0*1024.0*1024.0))
-}
-
-func CheckDockerClient(dockerClient *client.Client) error {
-	if dockerClient == nil {
-		return fmt.Errorf("Docker client is not connected")
-	}
-
-	return nil
-}
-
 func (a *App) GetDockerInfo()(string, error){
 	  
 	  CheckDockerClient(a.docker_client)
@@ -154,14 +90,12 @@ func (a *App) listenToDockerEvents() {
 		select{
 		case err := <- result.Err:
 			if err != nil {
-				fmt.Printf("Docker event error: %v", err)
-				return
+ 				return
 			}
 		
 		case msg := <- result.Messages:
 			 if msg.Type == "container"{
-				fmt.Printf("Docker Container Event: %s\n", msg.Action)
-				runtime.EventsEmit(a.ctx, "docker-event", msg.Action)
+ 				runtime.EventsEmit(a.ctx, "docker-event", msg.Action)
 			 }
 		}
 	}
