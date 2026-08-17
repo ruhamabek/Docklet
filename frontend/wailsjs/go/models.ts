@@ -90,6 +90,20 @@ export namespace image {
 
 export namespace main {
 	
+	export class AggregateMetrics {
+	    totalCpuPercent: number;
+	    totalMemoryMB: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AggregateMetrics(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalCpuPercent = source["totalCpuPercent"];
+	        this.totalMemoryMB = source["totalMemoryMB"];
+	    }
+	}
 	export class ContainerItem {
 	    id: string;
 	    name: string;
@@ -154,6 +168,26 @@ export namespace main {
 	        this.containerName = source["containerName"];
 	        this.hostPort = source["hostPort"];
 	        this.containerPort = source["containerPort"];
+	    }
+	}
+	export class SystemInfoData {
+	    ncpu: number;
+	    totalMemoryGB: number;
+	    totalMemoryBytes: number;
+	    serverVersion: string;
+	    operatingSystem: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SystemInfoData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ncpu = source["ncpu"];
+	        this.totalMemoryGB = source["totalMemoryGB"];
+	        this.totalMemoryBytes = source["totalMemoryBytes"];
+	        this.serverVersion = source["serverVersion"];
+	        this.operatingSystem = source["operatingSystem"];
 	    }
 	}
 

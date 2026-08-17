@@ -41,3 +41,16 @@ type ContainerStatsData struct {
 	MemoryPercent float64 `json:"memoryPercent"`  
 	MemoryHuman   string  `json:"memoryHuman"`    
 }
+
+type SystemInfoData struct {
+	NCPU             int    `json:"ncpu"`
+	TotalMemoryGB    float64 `json:"totalMemoryGB"`
+	TotalMemoryBytes int64  `json:"totalMemoryBytes"`
+	ServerVersion    string `json:"serverVersion"`
+	OperatingSystem  string `json:"operatingSystem"`
+}
+
+type AggregateMetrics struct {
+	TotalCpuPercent float64 `json:"totalCpuPercent"`
+	TotalMemoryMB   float64 `json:"totalMemoryMB"`
+}

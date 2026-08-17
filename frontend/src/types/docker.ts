@@ -1,4 +1,4 @@
-type activeTab = 'containers' | 'images'; 
+type activeTab = 'containers' | 'images' | 'dashboard'; 
 interface ContainerItem {
   id: string;
   name: string;

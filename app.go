@@ -1,17 +1,21 @@
 package main
 
 import (
- 	"context"
+	"context"
 	"fmt"
- 
+	"sync"
+
 	"github.com/moby/moby/client"
- )
+)
 
  type App struct {
 	ctx context.Context
 	docker_client *client.Client
 	cancelLogStream context.CancelFunc
 	cancelStatsStream context.CancelFunc
+	lastContainerCPU    map[string]uint64
+    lastSystemCPU       map[string]uint64
+    lastStatsMutex      sync.Mutex
 }
 
  func NewApp() *App {

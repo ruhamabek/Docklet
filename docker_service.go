@@ -405,3 +405,88 @@ func (a *App) StopContainerStats() {
 		a.cancelStatsStream = nil
   }
 }
+
+func (a *App) GetSystemInfo() (SystemInfoData, error) {
+	if a.docker_client == nil {
+		return SystemInfoData{}, fmt.Errorf("Docker client not connected")
+	}
+
+	res, err := a.docker_client.Info(a.ctx, client.InfoOptions{})
+	if err != nil {
+		return SystemInfoData{}, err
+	}
+
+ 	info := res.Info
+
+	totalGB := float64(info.MemTotal) / (1024.0 * 1024.0 * 1024.0)
+
+	return SystemInfoData{
+		NCPU:             info.NCPU,
+		TotalMemoryGB:    totalGB,
+		TotalMemoryBytes: info.MemTotal,
+		ServerVersion:    info.ServerVersion,
+		OperatingSystem:  info.OperatingSystem,
+	}, nil
+}
+
+func (a *App) GetAggregateMetrics() (AggregateMetrics, error) {
+	if a.docker_client == nil {
+		return AggregateMetrics{}, fmt.Errorf("Docker client not connected")
+	}
+	result, err := a.docker_client.ContainerList(a.ctx, client.ContainerListOptions{All: false})
+	if err != nil || len(result.Items) == 0 {
+		return AggregateMetrics{TotalCpuPercent: 0, TotalMemoryMB: 0}, nil
+	}
+	a.lastStatsMutex.Lock()
+	if a.lastContainerCPU == nil {
+		a.lastContainerCPU = make(map[string]uint64)
+		a.lastSystemCPU = make(map[string]uint64)
+	}
+	defer a.lastStatsMutex.Unlock()
+	var totalCpu float64 = 0
+	var totalMemBytes uint64 = 0
+	for _, c := range result.Items {
+		res, err := a.docker_client.ContainerStats(a.ctx, c.ID, client.ContainerStatsOptions{
+			Stream: false,
+		})
+		if err != nil {
+			continue
+		}
+		var v struct {
+			CPUStats struct {
+				CPUUsage struct {
+					TotalUsage uint64 `json:"total_usage"`
+				} `json:"cpu_usage"`
+				SystemCPUUsage uint64 `json:"system_cpu_usage"`
+				OnlineCPUs     uint32 `json:"online_cpus"`
+			} `json:"cpu_stats"`
+			MemoryStats struct {
+				Usage uint64 `json:"usage"`
+			} `json:"memory_stats"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&v); err == nil {
+			totalMemBytes += v.MemoryStats.Usage
+			currentTotal := v.CPUStats.CPUUsage.TotalUsage
+			currentSystem := v.CPUStats.SystemCPUUsage
+			prevTotal := a.lastContainerCPU[c.ID]
+			prevSystem := a.lastSystemCPU[c.ID]
+			if prevTotal > 0 && prevSystem > 0 && currentSystem > prevSystem && currentTotal >= prevTotal {
+				cpuDelta := float64(currentTotal - prevTotal)
+				systemDelta := float64(currentSystem - prevSystem)
+				numCPUs := float64(v.CPUStats.OnlineCPUs)
+				if numCPUs == 0 {
+					numCPUs = 1
+				}
+				totalCpu += (cpuDelta / systemDelta) * numCPUs * 100.0
+			}
+			a.lastContainerCPU[c.ID] = currentTotal
+			a.lastSystemCPU[c.ID] = currentSystem
+		}
+		res.Body.Close()
+	}
+	totalMemMB := float64(totalMemBytes) / (1024.0 * 1024.0)
+	return AggregateMetrics{
+		TotalCpuPercent: totalCpu,
+		TotalMemoryMB:   totalMemMB,
+	}, nil
+}

@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
-import { GetDockerInfo } from "@wailsjs/go/main/App";
+import { GetDockerInfo, GetSystemInfo } from "@wailsjs/go/main/App";
 
 export function useDockerStatus() {
   const [status, setStatus] = useState("Checking Docker...");
   const [isConnected, setIsConnected] = useState(false);
+  const [systemInfo, setSystemInfo] = useState({
+    ncpu: 4,
+    totalMemoryGB: 16,
+    serverVersion: "",
+    operatingSystem: "",
+  });
 
   function checkStatus() {
     GetDockerInfo()
@@ -15,6 +21,14 @@ export function useDockerStatus() {
         setStatus(`Error: ${err}`);
         setIsConnected(false);
       });
+
+     GetSystemInfo()
+      .then((info) => {
+        if (info) {
+          setSystemInfo(info);
+        }
+      })
+      .catch((err) => console.error("Failed to get system info:", err));
   }
 
   useEffect(() => {
@@ -24,6 +38,7 @@ export function useDockerStatus() {
   return {
     status,
     isConnected,
+    systemInfo,
     checkStatus,
   };
 }

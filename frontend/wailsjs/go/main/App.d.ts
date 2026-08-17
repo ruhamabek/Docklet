@@ -3,7 +3,11 @@
 import {main} from '../models';
 import {client} from '../models';
 
+export function GetAggregateMetrics():Promise<main.AggregateMetrics>;
+
 export function GetDockerInfo():Promise<string>;
+
+export function GetSystemInfo():Promise<main.SystemInfoData>;
 
 export function Greet(arg1:string):Promise<string>;
 
