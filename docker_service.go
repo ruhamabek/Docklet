@@ -311,7 +311,7 @@ func (a *App) StreamContainerResponse(id string) error {
 	CheckDockerClient(a.docker_client)
 
 	if a.cancelStatsStream != nil {
-		a.cancelLogStream()
+		a.cancelStatsStream()
 	}
 
 	statCtx, cancel := context.WithCancel(a.ctx)
