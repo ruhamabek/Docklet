@@ -138,6 +138,7 @@ export default function Home() {
         <div className={activeTab === "containers" ? "block" : "hidden"}>
           <ContainersView
             containers={containers}
+            isConnected={isConnected}
             onRefresh={refreshContainers}
             onStart={handleStartContainer}
             onStop={handleStopContainer}

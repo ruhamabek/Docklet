@@ -22,6 +22,7 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({
   containers,
+  isConnected,
   totalMemoryGB,
   ncpu,
   onNavigateTab,
@@ -43,12 +44,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
            <MemoryCard totalMemoryGB={totalMemoryGB} runningContainersCount={runningCount} />
            <ActiveContainersTable
               containers={containers}
+              isConnected={isConnected}
               onNavigateTab={onNavigateTab}
               onStartContainer={onStartContainer}
               onStopContainer={onStopContainer}
               onOpenLogs={onOpenLogs}
               onOpenStats={onOpenStats}
-            />
+           />
          <PortForwardingsCard containers={containers} onNavigateTab={onNavigateTab} />
       </div>
       

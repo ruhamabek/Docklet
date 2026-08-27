@@ -16,8 +16,13 @@ export function useImages() {
   const fetchImages = useCallback(() => {
     setLoading(true);
     ListImages()
-      .then((data) => setImages(data || []))
-      .catch((err) => console.error("Failed to load images:", err))
+      .then((data) => {
+        setImages(data || []);
+      })
+      .catch((err) => {
+        const error = getErrorMessage(err);
+        console.error("Failed to load images:", error);
+      })
       .finally(() => setLoading(false));
   }, []);
 

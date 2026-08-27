@@ -17,8 +17,13 @@ export function useContainers() {
   const fetchContainers = useCallback(() => {
     setLoading(true);
     ListContainers()
-      .then((data) => setContainers(data || []))
-      .catch((err) => console.error("Failed to load containers:", err))
+      .then((data) => {
+        setContainers(data || []);
+      })
+      .catch((err) => {
+        const error = getErrorMessage(err);
+        console.error("Failed to load containers:", error);
+      })
       .finally(() => setLoading(false));
   }, []);
 

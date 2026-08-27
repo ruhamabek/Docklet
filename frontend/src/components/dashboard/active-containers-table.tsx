@@ -2,6 +2,7 @@ import React from "react";
  
 interface ActiveContainersTableProps {
   containers: ContainerItem[];
+  isConnected: boolean;
   onNavigateTab: (tab: "containers" | "images") => void;
   onStartContainer: (id: string) => void;
   onStopContainer: (id: string) => void;
@@ -11,6 +12,7 @@ interface ActiveContainersTableProps {
 
 export const ActiveContainersTable: React.FC<ActiveContainersTableProps> = ({
   containers,
+  isConnected,
   onNavigateTab,
   onStartContainer,
   onStopContainer,
@@ -40,7 +42,11 @@ export const ActiveContainersTable: React.FC<ActiveContainersTableProps> = ({
       </div>
 
       <div className="overflow-x-auto">
-        {containers.length === 0 ? (
+        {!isConnected ? (
+          <div className="p-8 text-center text-destructive text-xs">
+            Docker daemon is offline.
+          </div>
+        ) : containers.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground text-xs">
             No containers found.
           </div>
@@ -91,7 +97,8 @@ export const ActiveContainersTable: React.FC<ActiveContainersTableProps> = ({
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => onOpenLogs(c.id)}
-                          className="px-2 py-1 bg-secondary border border-border hover:border-primary text-muted-foreground hover:text-primary text-[10px] font-bold transition-colors rounded-xs"
+                          disabled={!isConnected}
+                          className="px-2 py-1 bg-secondary border border-border hover:border-primary text-muted-foreground hover:text-primary text-[10px] font-bold transition-colors rounded-xs disabled:opacity-40 disabled:pointer-events-none"
                         >
                           LOGS
                         </button>
@@ -99,13 +106,15 @@ export const ActiveContainersTable: React.FC<ActiveContainersTableProps> = ({
                           <>
                             <button
                               onClick={() => onOpenStats(c)}
-                              className="px-2 py-1 bg-secondary border border-border hover:border-primary text-muted-foreground hover:text-primary text-[10px] font-bold transition-colors rounded-xs"
+                              disabled={!isConnected}
+                              className="px-2 py-1 bg-secondary border border-border hover:border-primary text-muted-foreground hover:text-primary text-[10px] font-bold transition-colors rounded-xs disabled:opacity-40 disabled:pointer-events-none"
                             >
                               STATS
                             </button>
                             <button
                               onClick={() => onStopContainer(c.id)}
-                              className="px-2 py-1 bg-secondary border border-border hover:border-destructive text-muted-foreground hover:text-destructive text-[10px] font-bold transition-colors rounded-xs"
+                              disabled={!isConnected}
+                              className="px-2 py-1 bg-secondary border border-border hover:border-destructive text-muted-foreground hover:text-destructive text-[10px] font-bold transition-colors rounded-xs disabled:opacity-40 disabled:pointer-events-none"
                             >
                               STOP
                             </button>
@@ -113,7 +122,8 @@ export const ActiveContainersTable: React.FC<ActiveContainersTableProps> = ({
                         ) : (
                           <button
                             onClick={() => onStartContainer(c.id)}
-                            className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-bold transition-colors rounded-xs shadow-xs"
+                            disabled={!isConnected}
+                            className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-bold transition-colors rounded-xs shadow-xs disabled:opacity-40 disabled:pointer-events-none"
                           >
                             START
                           </button>

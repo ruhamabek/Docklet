@@ -14,6 +14,11 @@ export function useDockerStatus() {
   function checkStatus() {
     GetDockerInfo()
       .then((res) => {
+        if (!res) {
+          setStatus("Docker daemon not responding");
+          setIsConnected(false);
+          return;
+        }
         setStatus(res);
         setIsConnected(!res.includes("failed") && !res.includes("not connected"));
       })
@@ -28,11 +33,13 @@ export function useDockerStatus() {
           setSystemInfo(info);
         }
       })
-      .catch((err) => console.error("Failed to get system info:", err));
+      .catch(() => {});
   }
 
   useEffect(() => {
     checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return {
