@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/netip"
 	"strings"
 	"github.com/moby/moby/api/types/container"
@@ -200,41 +201,74 @@ func (a *App) ListImages() ([]ImageItem, error) {
 	return items, nil
 }
 
-func (a *App) PullImages(imageName string)error{
-    CheckDockerClient(a.docker_client)
-    if imageName == "" {
+func (a *App) PullImages(imageName string) error {
+	CheckDockerClient(a.docker_client)
+	if imageName == "" {
 		return fmt.Errorf("Image name cant be empty")
 	}
 
-	reader, err := a.docker_client.ImagePull(a.ctx, imageName, client.ImagePullOptions{All: false})
+	if a.cancelPullImage != nil {
+		a.cancelPullImage()
+	}
+
+	pullCtx, cancel := context.WithCancel(a.ctx)
+	a.cancelPullImage = cancel
+	defer func() {
+		cancel()
+		a.cancelPullImage = nil
+	}()
+
+	reader, err := a.docker_client.ImagePull(pullCtx, imageName, client.ImagePullOptions{All: false})
 	if err != nil {
 		return err
 	}
 
 	defer reader.Close()
 
-    decoder := json.NewDecoder(reader)
+	decoder := json.NewDecoder(reader)
 
 	for {
+		if pullCtx.Err() != nil {
+			return fmt.Errorf("Image pull canceled")
+		}
+
 		var msg struct {
-			ID string `json:"id"`
-			Status string `json:"status"`
+			ID             string `json:"id"`
+			Status         string `json:"status"`
 			ProgressString string `json:"progress"`
+			Error          string `json:"error"`
 		}
 
 		if err := decoder.Decode(&msg); err != nil {
-              break
+			if pullCtx.Err() != nil {
+				return fmt.Errorf("Image pull canceled")
+			}
+			if err == io.EOF {
+				break
+			}
+			break
+		}
+
+		if msg.Error != "" {
+			return fmt.Errorf("%s", msg.Error)
 		}
 
 		runtime.EventsEmit(a.ctx, "image-pull-progress", PullProgress{
-			ID: msg.ID,
-			Status: msg.Status,
+			ID:       msg.ID,
+			Status:   msg.Status,
 			Progress: msg.ProgressString,
 		})
 	}
-    
+
 	runtime.EventsEmit(a.ctx, "image-pull-done", imageName)
 	return nil
+}
+
+func (a *App) CancelPullImage() {
+	if a.cancelPullImage != nil {
+		a.cancelPullImage()
+		a.cancelPullImage = nil
+	}
 }
 
 func (a *App) RemoveContainer(id string) (client.ContainerRemoveResult, error){
@@ -361,16 +395,24 @@ func (a *App) StreamContainerResponse(id string) error {
                 return 
 		      }
 			  var cpuPercent float64
-		      cpuDelta := float64(v.CPUStats.CPUUsage.TotalUsage) - float64(prevCPU)
-			  systemDelta := float64(v.CPUStats.SystemUsage) - float64(prevSystem)
-              onlineCpus := float64(v.CPUStats.OnlineCPUs)
-             
-			  if onlineCpus == 0.0{
+			  onlineCpus := float64(v.CPUStats.OnlineCPUs)
+			  if onlineCpus == 0.0 {
 				  onlineCpus = 1.0
 			  }
 
+			  var cpuDelta float64
+			  var systemDelta float64
+
+			  if v.PreCPUStats.SystemUsage > 0 && v.CPUStats.SystemUsage > v.PreCPUStats.SystemUsage {
+				  cpuDelta = float64(v.CPUStats.CPUUsage.TotalUsage) - float64(v.PreCPUStats.CPUUsage.TotalUsage)
+				  systemDelta = float64(v.CPUStats.SystemUsage) - float64(v.PreCPUStats.SystemUsage)
+			  } else if prevSystem > 0 && v.CPUStats.SystemUsage > prevSystem {
+				  cpuDelta = float64(v.CPUStats.CPUUsage.TotalUsage) - float64(prevCPU)
+				  systemDelta = float64(v.CPUStats.SystemUsage) - float64(prevSystem)
+			  }
+
 			  if systemDelta > 0.0 && cpuDelta > 0 {
-				 cpuPercent = (cpuDelta / systemDelta) * onlineCpus * 100.0
+				  cpuPercent = (cpuDelta / systemDelta) * onlineCpus * 100.0
 			  }
 			  prevCPU = v.CPUStats.CPUUsage.TotalUsage
 			  prevSystem = v.CPUStats.SystemUsage

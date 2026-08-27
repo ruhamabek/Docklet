@@ -16,38 +16,66 @@ interface HistorySample {
   memoryMB: number;
 }
 
+interface ContainerStatsState {
+  history: HistorySample[];
+  currentStats: ContainerStatsData | null;
+  latestSample: { cpu: number; memoryMB: number };
+}
+
+const statsCache = new Map<string, ContainerStatsState>();
+
+const createInitialHistory = (): HistorySample[] =>
+  Array.from({ length: 24 }, (_, i) => ({
+    timeLabel: `${24 - i}s`,
+    cpu: 0,
+    memoryMB: 0,
+  }));
+
 export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) => {
-  const [currentStats, setCurrentStats] = useState<ContainerStatsData | null>(null);
+  const containerId = container?.id;
+
+  const [currentStats, setCurrentStats] = useState<ContainerStatsData | null>(() => {
+    if (!containerId) return null;
+    return statsCache.get(containerId)?.currentStats || null;
+  });
   const [activeMetric, setActiveMetric] = useState<"cpu" | "memory">("cpu");
 
   const latestSampleRef = useRef<{ cpu: number; memoryMB: number }>({ cpu: 0, memoryMB: 0 });
 
-  // Rolling 24-sample history buffer
-  const [history, setHistory] = useState<HistorySample[]>(() =>
-    Array.from({ length: 24 }, (_, i) => ({
-      timeLabel: `${24 - i}s`,
-      cpu: 0,
-      memoryMB: 0,
-    }))
-  );
+  const [history, setHistory] = useState<HistorySample[]>(() => {
+    if (!containerId) return createInitialHistory();
+    return statsCache.get(containerId)?.history || createInitialHistory();
+  });
 
   useEffect(() => {
     if (!container) return;
 
-    latestSampleRef.current = { cpu: 0, memoryMB: 0 };
-    setCurrentStats(null);
-    setHistory(
-      Array.from({ length: 24 }, (_, i) => ({
-        timeLabel: `${24 - i}s`,
-        cpu: 0,
-        memoryMB: 0,
-      }))
-    );
+    const id = container.id;
+    const cached = statsCache.get(id);
 
-    // 🌟 1. Register Event Listener FIRST (Handles both camelCase & snake_case)
-      // 🌟 Listen to the exact event name from your Go code: "container-stats-update"
-    const unsub = EventsOn("container-stats-update", (raw: any) => {
+    if (cached) {
+      latestSampleRef.current = { ...cached.latestSample };
+      setCurrentStats(cached.currentStats);
+      setHistory(cached.history);
+    } else {
+      const initialHistory = createInitialHistory();
+      latestSampleRef.current = { cpu: 0, memoryMB: 0 };
+      setCurrentStats(null);
+      setHistory(initialHistory);
+      statsCache.set(id, {
+        history: initialHistory,
+        currentStats: null,
+        latestSample: { cpu: 0, memoryMB: 0 },
+      });
+    }
+
+    const unsub = EventsOn("container-stats-update", (raw: RawContainerStatsEvent) => {
       if (!raw) return;
+
+      const eventContainerId = raw.containerId || raw.ContainerID || "";
+      if (eventContainerId && !id.startsWith(eventContainerId) && !eventContainerId.startsWith(id)) {
+        return;
+      }
 
       const cpu = raw.cpuPercent ?? raw.CPUPercent ?? 0;
       const memMB = raw.memoryUsageMB ?? raw.MemoryUsageMB ?? 0;
@@ -56,7 +84,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
       const memHuman = raw.memoryHuman ?? raw.MemoryHuman ?? `${Number(memMB).toFixed(1)} MB`;
 
       const parsed: ContainerStatsData = {
-        containerId: raw.containerId || raw.ContainerID || container.id,
+        containerId: id,
         cpuPercent: Number(cpu),
         memoryUsageMB: Number(memMB),
         memoryLimitMB: Number(memLimit),
@@ -65,23 +93,23 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
       };
 
       setCurrentStats(parsed);
-      latestSampleRef.current = {
+      const newSample = {
         cpu: Number(parsed.cpuPercent.toFixed(2)),
-        memoryMB: Number(parsed.memoryUsageMB.toFixed(1)),
+        memoryMB: Number(parsed.memoryUsageMB.toFixed(2)),
       };
+      latestSampleRef.current = newSample;
+
+      const currentEntry = statsCache.get(id);
+      if (currentEntry) {
+        currentEntry.currentStats = parsed;
+        currentEntry.latestSample = newSample;
+      }
     });
 
-    // 🌟 Start your stream function
-    StreamContainerResponse(container.id).catch((err) =>
+    StreamContainerResponse(id).catch((err) =>
       console.error("Stream error:", err)
     );
 
-    // 🌟 2. Start streaming socket in Go
-    StreamContainerResponse(container.id).catch((err) =>
-      console.error("Stream error:", err)
-    );
-
-    // 🌟 3. Smooth 1-Second Sliding Timeline Clock (Ensures 24 bars shift live)
     const ticker = setInterval(() => {
       const now = new Date();
       const timeStr = `${now.getMinutes().toString().padStart(2, "0")}:${now
@@ -89,14 +117,28 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
         .toString()
         .padStart(2, "0")}`;
 
-      setHistory((prev) => [
-        ...prev.slice(1),
-        {
-          timeLabel: timeStr,
-          cpu: latestSampleRef.current.cpu,
-          memoryMB: latestSampleRef.current.memoryMB,
-        },
-      ]);
+      setHistory((prev) => {
+        const next = [
+          ...prev.slice(1),
+          {
+            timeLabel: timeStr,
+            cpu: latestSampleRef.current.cpu,
+            memoryMB: latestSampleRef.current.memoryMB,
+          },
+        ];
+        const entry = statsCache.get(id);
+        if (entry) {
+          entry.history = next;
+          entry.latestSample = latestSampleRef.current;
+        } else {
+          statsCache.set(id, {
+            history: next,
+            currentStats: null,
+            latestSample: latestSampleRef.current,
+          });
+        }
+        return next;
+      });
     }, 1000);
 
     return () => {
@@ -106,7 +148,6 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
     };
   }, [container]);
 
-  // Calculations for [●] Current, [⬆] Peak, [Σ] Average
   const values = useMemo(
     () => history.map((h) => (activeMetric === "cpu" ? h.cpu : h.memoryMB)),
     [history, activeMetric]
@@ -114,11 +155,19 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
 
   const currentVal = values[values.length - 1] || 0;
   const peakVal = Math.max(...values, 0.1);
-  const avgVal = Number(
-    (values.reduce((sum, v) => sum + v, 0) / (values.length || 1)).toFixed(2)
-  );
+  const avgVal = useMemo(() => {
+    const recordedSamples = history.filter((h) => h.timeLabel.includes(":"));
+    const samplesToAvg = recordedSamples.length > 0 ? recordedSamples : history;
+    const metricVals = samplesToAvg.map((h) => (activeMetric === "cpu" ? h.cpu : h.memoryMB));
+    const sum = metricVals.reduce((acc, v) => acc + v, 0);
+    return Number((sum / (metricVals.length || 1)).toFixed(2));
+  }, [history, activeMetric]);
 
   if (!container) return null;
+
+  const maxScale = activeMetric === "cpu"
+    ? Math.max(peakVal * 1.25, 1.5)
+    : Math.max(peakVal * 1.2, 2.0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 font-mono select-none">
@@ -140,8 +189,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Metric Mode Switcher */}
-            <div className="flex bg-background border border-border p-0.5 rounded-xs">
+             <div className="flex bg-background border border-border p-0.5 rounded-xs">
               <button
                 onClick={() => setActiveMetric("cpu")}
                 className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-xs transition-colors ${
@@ -176,15 +224,14 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
           </div>
         </div>
 
-        {/* 🌟 Top Stat Counters (EvilCharts Style) */}
-        <div className="flex flex-row justify-between items-center bg-background border border-border p-4 rounded-xs">
+         <div className="flex flex-row justify-between items-center bg-background border border-border p-4 rounded-xs">
           <div className="flex flex-row items-center gap-6">
             <div className="flex flex-col gap-0.5">
               <span className="text-muted-foreground text-[10px] uppercase tracking-wider">
                 [●] Current {activeMetric === "cpu" ? "Load" : "Memory"}
               </span>
               <span className="text-primary font-mono text-2xl font-bold tracking-tight">
-                {activeMetric === "cpu" ? `${currentVal.toFixed(2)}%` : `${currentVal.toFixed(1)} MB`}
+                {activeMetric === "cpu" ? `${currentVal.toFixed(2)}%` : `${currentVal.toFixed(2)} MB`}
               </span>
             </div>
 
@@ -192,10 +239,10 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
 
             <div className="flex flex-col gap-0.5">
               <span className="text-muted-foreground text-[10px] uppercase tracking-wider">
-                [⬆] Peak
+                Peak
               </span>
               <span className="text-foreground font-mono text-2xl font-bold tracking-tight">
-                {activeMetric === "cpu" ? `${peakVal.toFixed(2)}%` : `${peakVal.toFixed(1)} MB`}
+                {activeMetric === "cpu" ? `${peakVal.toFixed(2)}%` : `${peakVal.toFixed(2)} MB`}
               </span>
             </div>
 
@@ -206,52 +253,44 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
                 [Σ] Average
               </span>
               <span className="text-muted-foreground font-mono text-2xl font-bold tracking-tight">
-                {activeMetric === "cpu" ? `${avgVal.toFixed(2)}%` : `${avgVal.toFixed(1)} MB`}
+                {activeMetric === "cpu" ? `${avgVal.toFixed(2)}%` : `${avgVal.toFixed(2)} MB`}
               </span>
             </div>
           </div>
 
-          <div className="text-right hidden sm:block">
-            <span className="text-[10px] text-muted-foreground block">
-              // SAMPLING: <strong className="text-primary">1000ms</strong>
-            </span>
-            <span className="text-[10px] text-muted-foreground block">
-              // MODE: <strong className="text-primary">SEGMENTED MATRIX</strong>
-            </span>
-          </div>
         </div>
 
-        {/* 🌟 Segmented Block Matrix (24 Discrete Rolling Columns) */}
-        <div className="bg-background border border-border p-4 rounded-xs flex flex-col gap-2">
+         <div className="bg-background border border-border p-4 rounded-xs flex flex-col gap-2">
           <div className="flex justify-between items-center text-[10px] text-muted-foreground pb-2 border-b border-dashed border-border">
             <span>HISTORICAL 24-SECOND REAL-TIME BUFFER</span>
-            <span className="text-primary font-bold">STREAMING ACTIVE ⚡</span>
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+              </span>
+              <span className="text-primary font-bold">STREAMING ACTIVE</span>
+            </div>
           </div>
 
-          {/* 24 Vertical Block Columns */}
-          <div className="h-44 w-full flex items-end gap-1.5 pt-4">
+           <div className="h-44 w-full flex items-end gap-1.5 pt-4">
             {history.map((h, colIdx) => {
               const val = activeMetric === "cpu" ? h.cpu : h.memoryMB;
               
-              // Dynamic scale (if CPU is 0.2%, scale to 1.5% so blocks light up)
-              const maxScale = Math.max(peakVal * 1.3, activeMetric === "cpu" ? 1.5 : 30);
-              const heightPct = Math.min(100, Math.max(8, (val / maxScale) * 100));
+              const heightPct = Math.min(100, Math.max(val > 0 ? 8 : 0, (val / maxScale) * 100));
 
               const totalBlocks = 10;
-              const activeBlocks = Math.ceil((heightPct / 100) * totalBlocks);
+              const activeBlocks = val > 0 ? Math.ceil((heightPct / 100) * totalBlocks) : 0;
 
               return (
                 <div
                   key={colIdx}
                   className="flex-1 flex flex-col justify-end gap-1 h-full group relative cursor-pointer"
                 >
-                  {/* Hover Tooltip */}
-                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-popover border border-border text-[9px] text-primary px-1.5 py-0.5 rounded-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 font-bold">
-                    {val} {activeMetric === "cpu" ? "%" : "MB"}
+                   <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-popover border border-border text-[9px] text-primary px-1.5 py-0.5 rounded-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 font-bold shadow-sm">
+                    {activeMetric === "cpu" ? `${val.toFixed(2)}%` : `${val.toFixed(2)} MB`}
                   </div>
 
-                  {/* 10 Vertical Segmented Blocks */}
-                  {Array.from({ length: totalBlocks }).map((_, blockIdx) => {
+                   {Array.from({ length: totalBlocks }).map((_, blockIdx) => {
                     const blockNumber = totalBlocks - blockIdx;
                     const isActive = blockNumber <= activeBlocks && val > 0;
 
@@ -269,8 +308,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
                     );
                   })}
 
-                  {/* X-axis tick */}
-                  <span className="text-[8px] text-muted-foreground text-center truncate block mt-1">
+                   <span className="text-[8px] text-muted-foreground text-center truncate block mt-1">
                     {colIdx % 4 === 0 ? h.timeLabel : ""}
                   </span>
                 </div>
@@ -279,20 +317,13 @@ export const StatsModal: React.FC<StatsModalProps> = ({ container, onClose }) =>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-between items-center pt-2 text-[11px] text-muted-foreground">
+         <div className="flex justify-between items-center pt-2 text-[11px] text-muted-foreground">
           <span>
             {currentStats
-              ? `Memory Usage: ${currentStats.memoryUsageMB.toFixed(1)} MB / ${(currentStats.memoryLimitMB / 1024).toFixed(1)} GB (${currentStats.memoryPercent.toFixed(1)}%)`
+              ? `Memory Usage: ${currentStats.memoryUsageMB.toFixed(2)} MB / ${(currentStats.memoryLimitMB / 1024).toFixed(1)} GB (${currentStats.memoryPercent.toFixed(1)}%)`
               : "Connected to container socket."}
           </span>
 
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-secondary border border-border hover:border-primary text-foreground hover:text-primary text-xs font-bold transition-colors rounded-xs"
-          >
-            CLOSE
-          </button>
         </div>
 
       </div>

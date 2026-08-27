@@ -28,7 +28,7 @@ export const BottomLogTerminal: React.FC<BottomLogTerminalProps> = ({
 
     setLogs([]);
     StreamContainerLogs(containerId).catch((err) =>
-      alert("Failed to attach log stream: " + err)
+      setLogs((prev) => [...prev, `❌ [STREAM ATTACH ERROR]: ${err?.message || err}`])
     );
 
     const unsubLogs = EventsOn("container-log-line", (line: string) => {

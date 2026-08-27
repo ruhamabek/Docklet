@@ -5,6 +5,7 @@ import {
   Download, 
   RefreshCw,
   Activity,
+  Loader2,
 } from 'lucide-react';
 import { useDockerStatus } from '@/app/hooks/useDocker';
  
@@ -16,6 +17,8 @@ interface HeaderProps {
   imagesCount: number;
   onOpenPullModal: () => void;
   onRefreshAll: () => void;
+  isPulling?: boolean;
+  pullingImageName?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +29,8 @@ export const Header: React.FC<HeaderProps> = ({
   imagesCount,
   onOpenPullModal,
   onRefreshAll,
+  isPulling = false,
+  pullingImageName = "",
 }) => {
   const { isConnected } = useDockerStatus();
 
@@ -51,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-40 w-full bg-background border-b border-border select-none font-mono">
       <div className="flex items-center justify-between h-14 px-4 gap-4">
         
-         <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-6 h-6 bg-primary rounded-xs flex items-center justify-center shadow-[0_0_10px_var(--primary)]">
               <div className="w-3.5 h-3.5 bg-background"></div>
@@ -71,7 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-         <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+        <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -92,7 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
           })}
         </nav>
 
-         <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onRefreshAll}
             className="p-2 rounded-xs text-xs bg-card border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
@@ -101,13 +106,26 @@ export const Header: React.FC<HeaderProps> = ({
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
 
-          <button
-            onClick={onOpenPullModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xs bg-secondary border border-border text-xs font-mono font-bold text-foreground hover:border-primary hover:text-primary transition-colors"
-          >
-            <Download className="w-3.5 h-3.5 text-primary" />
-            <span>PULL IMAGE</span>
-          </button>
+          {isPulling ? (
+            <button
+              onClick={onOpenPullModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xs bg-primary/20 border border-primary text-xs font-mono font-bold text-primary animate-pulse transition-colors"
+              title="Click to view live pull logs"
+            >
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="truncate max-w-[140px]">
+                {pullingImageName ? `PULLING: ${pullingImageName}` : "PULLING..."}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenPullModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xs bg-secondary border border-border text-xs font-mono font-bold text-foreground hover:border-primary hover:text-primary transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 text-primary" />
+              <span>PULL IMAGE</span>
+            </button>
+          )}
         </div>
 
       </div>

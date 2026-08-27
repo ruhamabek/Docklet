@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {client} from '../models';
 
+export function CancelPullImage():Promise<void>;
+
 export function GetAggregateMetrics():Promise<main.AggregateMetrics>;
 
 export function GetDockerInfo():Promise<string>;

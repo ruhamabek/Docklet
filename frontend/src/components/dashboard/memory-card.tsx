@@ -18,8 +18,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
       return;
     }
 
-    // 🌟 Fetch real exact aggregate memory usage from Docker!
-    function fetchRealMemory() {
+     function fetchRealMemory() {
       GetAggregateMetrics()
         .then((m) => {
           if (m) {

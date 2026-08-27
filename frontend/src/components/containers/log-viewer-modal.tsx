@@ -1,71 +1,107 @@
-import { useState, useEffect, useRef } from "react";
-import { StreamContainerLogs, StopContainerLogs } from "@wailsjs/go/main/App";
-import { EventsOn } from "@wailsjs/runtime/runtime";
-import { Button } from "@/components/ui/button";
+"use client"
+
+import React, { useState, useEffect, useRef } from "react"
+import { StreamContainerLogs, StopContainerLogs } from "@wailsjs/go/main/App"
+import { EventsOn } from "@wailsjs/runtime/runtime"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Terminal, Trash2, X } from "lucide-react"
 
 interface LogViewerModalProps {
-  containerId: string | null;
-  onClose: () => void;
+  containerId: string | null
+  containerName?: string
+  onClose: () => void
 }
 
-export function LogViewerModal({ containerId, onClose }: LogViewerModalProps) {
-  const [logs, setLogs] = useState<string[]>([]);
-  const logContainerRef = useRef<HTMLDivElement>(null);
+export function LogViewerModal({
+  containerId,
+  containerName,
+  onClose,
+}: LogViewerModalProps) {
+  const [logs, setLogs] = useState<string[]>([])
+  const logContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!containerId) return;
+    if (!containerId) return
 
-    setLogs([]);
-    StreamContainerLogs(containerId).catch((err) => alert("Failed to open stream: " + err));
+    setLogs([])
+    StreamContainerLogs(containerId).catch((err) =>
+      setLogs((prev) => [...prev, `❌ [STREAM ATTACH ERROR]: ${err?.message || err}`])
+    )
 
     const unsubLogs = EventsOn("container-log-line", (line: string) => {
-      setLogs((prev) => [...prev, line]);
-    });
+      setLogs((prev) => [...prev, line])
+    })
 
     const unsubErrors = EventsOn("container-log-error", (errMsg: string) => {
-      setLogs((prev) => [...prev, `❌ [ERROR]: ${errMsg}`]);
-    });
+      setLogs((prev) => [...prev, `❌ [ERROR]: ${errMsg}`])
+    })
 
     return () => {
-      StopContainerLogs();
-      unsubLogs();
-      unsubErrors();
-    };
-  }, [containerId]);
+      StopContainerLogs()
+      unsubLogs()
+      unsubErrors()
+    }
+  }, [containerId])
 
   useEffect(() => {
     if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
     }
-  }, [logs]);
+  }, [logs])
 
-  if (!containerId) return null;
+  if (!containerId) return null
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-4xl rounded-xl p-4 flex flex-col gap-3 shadow-2xl">
-        <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-            Live Logs: <span className="font-mono text-slate-400">({containerId})</span>
-          </h3>
-          <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setLogs([])}>Clear</Button>
-            <Button size="sm" variant="destructive" onClick={onClose}>Close ✖</Button>
+    <Dialog open={!!containerId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="border border-border bg-card text-foreground font-mono max-w-4xl p-6">
+        <DialogHeader className="flex flex-row items-center justify-between">
+          <DialogTitle className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-primary" />
+            <span>Live Container Logs</span>
+            <span className="text-xs text-primary font-bold">
+              {containerName ? containerName : containerId.slice(0, 12)}
+            </span>
+          </DialogTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setLogs([])}
+              disabled={logs.length === 0}
+              className="text-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Clear
+            </Button>
           </div>
-        </div>
+        </DialogHeader>
 
-        <div 
-          ref={logContainerRef} 
-          className="bg-black text-green-400 font-mono text-xs p-4 rounded-lg h-96 overflow-y-auto whitespace-pre-wrap flex flex-col gap-1 border border-slate-800"
+        <div
+          ref={logContainerRef}
+          className="bg-background text-primary font-mono text-[11px] p-4 rounded-xs h-96 overflow-y-auto whitespace-pre-wrap flex flex-col gap-1 border border-border scrollbar-thin"
         >
           {logs.length === 0 ? (
-            <span className="text-slate-500 italic">Waiting for container log output...</span>
+            <span className="text-muted-foreground italic text-xs">
+              Waiting for container stdout/stderr stream...
+            </span>
           ) : (
-            logs.map((line, index) => <div key={index} className="leading-relaxed">{line}</div>)
+            logs.map((line, index) => (
+              <div
+                key={index}
+                className="leading-relaxed hover:bg-muted/20 px-1 rounded-xs"
+              >
+                {line}
+              </div>
+            ))
           )}
         </div>
-      </div>
-    </div>
-  );
+      </DialogContent>
+    </Dialog>
+  )
 }

@@ -35,5 +35,23 @@ interface ContainerStatsData {
   memoryLimitMB: number;
   memoryPercent: number;
   memoryHuman: string;
-  
 }
+
+interface RawContainerStatsEvent {
+  containerId: string;
+  ContainerID: string;
+  cpuPercent: number;
+  CPUPercent: number;
+  memoryUsageMB: number;
+  MemoryUsageMB: number;
+  memoryLimitMB: number;
+  MemoryLimitMB: number;
+  memoryPercent: number;
+  MemoryPercent: number;
+  memoryHuman: string;
+  MemoryHuman: string;
+}
+
+type ActionResult<T = void> =
+  | { success: true; data?: T; error?: never }
+  | { success: false; error: string; data?: never };

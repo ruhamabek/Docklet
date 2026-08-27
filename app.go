@@ -13,6 +13,7 @@ import (
 	docker_client *client.Client
 	cancelLogStream context.CancelFunc
 	cancelStatsStream context.CancelFunc
+	cancelPullImage   context.CancelFunc
 	lastContainerCPU    map[string]uint64
     lastSystemCPU       map[string]uint64
     lastStatsMutex      sync.Mutex

@@ -1,0 +1,131 @@
+name: Build Cross-Platform Binaries
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  # 🐧 1. Linux Universal Build (Built on Ubuntu 22.04 for backward compatibility on Debian, Ubuntu, Fedora, Arch, Mint)
+  build-linux:
+    name: Build Linux (Universal x86_64)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux GTK & WebKit Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Linux Executable
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          wails build
+
+      - name: Upload Linux Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: Docklet-Linux-x86_64
+          path: build/bin/Docklet*
+          if-no-files-found: error
+
+  # 🍎 2. macOS Universal Build (Intel + Apple Silicon M1/M2/M3/M4)
+  build-macos:
+    name: Build macOS (Universal Binary)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build macOS App Bundle
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          wails build -platform darwin/universal
+
+      - name: Zip macOS App Bundle
+        run: |
+          cd build/bin
+          zip -r Docklet-macOS-Universal.zip *.app
+
+      - name: Upload macOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: Docklet-macOS-Universal
+          path: build/bin/Docklet-macOS-Universal.zip
+          if-no-files-found: error
+
+  # 🪟 3. Windows 64-bit Build
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Windows Executable
+        shell: bash
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          wails build
+
+      - name: Upload Windows Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Docklet-Windows-x64
+          path: build/bin/*.exe
+          if-no-files-found: error
