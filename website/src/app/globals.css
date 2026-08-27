@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --background: #090a0f;
+  --foreground: #e1e7ec;
+  --card: #0f111a;
+  --card-foreground: #e1e7ec;
+  --popover: #0f111a;
+  --popover-foreground: #e1e7ec;
+  --primary: #00ff66;
+  --primary-foreground: #000000;
+  --secondary: #161926;
+  --secondary-foreground: #e1e7ec;
+  --muted: #1a1d2c;
+  --muted-foreground: #7b849b;
+  --accent: #161926;
+  --accent-foreground: #00ff66;
+  --destructive: #ff3366;
+  --border: #232738;
+  --input: #232738;
+  --ring: #00ff66;
+}
+
+body {
+  background-color: #090a0f;
+  color: #e1e7ec;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.text-glow-primary {
+  text-shadow: 0 0 16px rgba(0, 255, 102, 0.6);
+}
+
+.glow-primary {
+  box-shadow: 0 0 25px rgba(0, 255, 102, 0.25);
+}

@@ -1,5 +1,9 @@
 # Docklet
 
+[![Total Downloads](https://img.shields.io/github/downloads/ruhamabek/Docklet/total?style=flat-square&color=00ff66&label=Downloads)](https://github.com/ruhamabek/Docklet/releases)
+[![Latest Release](https://img.shields.io/github/v/release/ruhamabek/Docklet?style=flat-square&color=00ff66&label=Release)](https://github.com/ruhamabek/Docklet/releases)
+[![License](https://img.shields.io/github/license/ruhamabek/Docklet?style=flat-square&color=00ff66)](https://github.com/ruhamabek/Docklet/blob/main/LICENSE)
+
 Docklet is a lightweight, privacy-focused desktop application for managing Docker containers and images. Built with Go, Wails v2, Next.js, TypeScript, Tailwind CSS, and Shadcn UI, Docklet provides a high-performance terminal aesthetic with real-time metrics, live log streaming, and zero cloud telemetry.
 
 ![Docklet Dashboard](docs/screenshots/dashboard.png)
