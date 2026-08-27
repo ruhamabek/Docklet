@@ -36,3 +36,10 @@ node_modules
 frontend/dist
 .next
 frontend/out
+
+# Wails auto-generated bindings (regenerated on every wails dev/build)
+frontend/wailsjs/
+frontend/package.json.md5
+
+# TypeScript build cache
+*.tsbuildinfo

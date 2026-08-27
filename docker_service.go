@@ -16,13 +16,14 @@ import (
 
 
 func (a *App) GetDockerInfo()(string, error){
-	  
-	  CheckDockerClient(a.docker_client)
+	  if err := CheckDockerClient(a.docker_client); err != nil {
+		  return "", err
+	  }
    
 	  ping, err := a.docker_client.Ping(a.ctx, client.PingOptions{})
 
 	  if err != nil {
-		  return fmt.Sprintf("Docker ping failed: %v", err), nil
+		  return "", fmt.Errorf("Docker ping failed: %w", err)
 	  }
    
 	  return fmt.Sprintf("Docker ping successful: %v", ping), nil
@@ -30,7 +31,9 @@ func (a *App) GetDockerInfo()(string, error){
 }
 
 func (a *App) ListContainers()([]ContainerItem , error){
-	  CheckDockerClient(a.docker_client)
+	  if err := CheckDockerClient(a.docker_client); err != nil {
+		  return nil, err
+	  }
 
 	  rawContainers, err := a.docker_client.ContainerList(a.ctx, client.ContainerListOptions{All: true})
 	  if err != nil {
@@ -71,12 +74,16 @@ func (a *App) ListContainers()([]ContainerItem , error){
 }
 
 func (a *App) StartContainer(id string)(client.ContainerStartResult, error) {
-	  CheckDockerClient(a.docker_client)
+	  if err := CheckDockerClient(a.docker_client); err != nil {
+		  return client.ContainerStartResult{}, err
+	  }
 	  return a.docker_client.ContainerStart(a.ctx, id, client.ContainerStartOptions{})
 }
 
 func (a *App) StopContainer(id string)(client.ContainerStopResult, error){
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return client.ContainerStopResult{}, err
+	}
 	return a.docker_client.ContainerStop(a.ctx, id, client.ContainerStopOptions{})
 }
 
@@ -104,7 +111,9 @@ func (a *App) listenToDockerEvents() {
 }
 
 func (a *App) StreamContainerLogs(id string) error{
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return err
+	}
 
 	if a.cancelLogStream != nil {
 		a.cancelLogStream()
@@ -202,7 +211,9 @@ func (a *App) ListImages() ([]ImageItem, error) {
 }
 
 func (a *App) PullImages(imageName string) error {
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return err
+	}
 	if imageName == "" {
 		return fmt.Errorf("Image name cant be empty")
 	}
@@ -272,7 +283,9 @@ func (a *App) CancelPullImage() {
 }
 
 func (a *App) RemoveContainer(id string) (client.ContainerRemoveResult, error){
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return client.ContainerRemoveResult{}, err
+	}
 
 	return a.docker_client.ContainerRemove(a.ctx,id, client.ContainerRemoveOptions{
 		Force: true,
@@ -280,7 +293,9 @@ func (a *App) RemoveContainer(id string) (client.ContainerRemoveResult, error){
 }
 
 func (a *App) RemoveImage(id string) (client.ImageRemoveResult, error){
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return client.ImageRemoveResult{}, err
+	}
 
 	return a.docker_client.ImageRemove(a.ctx, id, client.ImageRemoveOptions{
 		Force:         true, 
@@ -289,7 +304,9 @@ func (a *App) RemoveImage(id string) (client.ImageRemoveResult, error){
 }
 
 func (a *App) RunImage(opts RunImageOptions)error {
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return err
+	}
 
 	portBindings := network.PortMap{}
 	exposedPorts := network.PortSet{}
@@ -342,7 +359,9 @@ func (a *App) RunImage(opts RunImageOptions)error {
 }
 
 func (a *App) StreamContainerResponse(id string) error {
-	CheckDockerClient(a.docker_client)
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return err
+	}
 
 	if a.cancelStatsStream != nil {
 		a.cancelStatsStream()
@@ -472,11 +491,14 @@ func (a *App) GetSystemInfo() (SystemInfoData, error) {
 }
 
 func (a *App) GetAggregateMetrics() (AggregateMetrics, error) {
-	if a.docker_client == nil {
-		return AggregateMetrics{}, fmt.Errorf("Docker client not connected")
+	if err := CheckDockerClient(a.docker_client); err != nil {
+		return AggregateMetrics{}, err
 	}
 	result, err := a.docker_client.ContainerList(a.ctx, client.ContainerListOptions{All: false})
-	if err != nil || len(result.Items) == 0 {
+	if err != nil {
+		return AggregateMetrics{}, fmt.Errorf("failed to list containers: %w", err)
+	}
+	if len(result.Items) == 0 {
 		return AggregateMetrics{TotalCpuPercent: 0, TotalMemoryMB: 0}, nil
 	}
 	a.lastStatsMutex.Lock()

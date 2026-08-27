@@ -6,6 +6,7 @@ import { Activity, Play, RefreshCcw, StopCircle, Trash } from "lucide-react"
 
 interface ContainersViewProps {
   containers: ContainerItem[]
+  isConnected: boolean
   onRefresh: () => void
   onStart: (id: string) => void
   onStop: (id: string) => void
@@ -15,6 +16,7 @@ interface ContainersViewProps {
 
 export function ContainersView({
   containers,
+  isConnected,
   onRefresh,
   onStart,
   onStop,
@@ -27,13 +29,17 @@ export function ContainersView({
         <h2 className="text-xl font-bold text-foreground">
           Containers ({containers.length})
         </h2>
-        <Button size="sm" onClick={onRefresh}>
+        <Button size="sm" onClick={onRefresh} disabled={!isConnected}>
           <RefreshCcw className="w-3.5 h-3.5 mr-1" />
           Refresh
         </Button>
       </div>
 
-      {containers.length === 0 ? (
+      {!isConnected ? (
+        <div className="p-8 text-center border border-dashed border-destructive/40 rounded-xs text-destructive text-xs">
+          Docker daemon is offline. Start Docker Desktop to manage containers.
+        </div>
+      ) : containers.length === 0 ? (
         <div className="p-8 text-center border border-dashed border-border rounded-xs text-muted-foreground text-xs">
           No containers found. Go to the Images tab to launch one!
         </div>
@@ -81,6 +87,7 @@ export function ContainersView({
                         size="sm"
                         variant="destructive"
                         onClick={() => onStop(c.id)}
+                        disabled={!isConnected}
                       >
                         <StopCircle className="w-3.5 h-3.5 mr-1" />
                         Stop
@@ -90,6 +97,7 @@ export function ContainersView({
                         variant="outline"
                         className="bg-secondary border border-border text-foreground hover:border-primary hover:text-primary"
                         onClick={() => onStats(c)}
+                        disabled={!isConnected}
                       >
                         <Activity className="w-3.5 h-3.5 mr-1" />
                         Stats
@@ -100,6 +108,7 @@ export function ContainersView({
                       size="sm"
                       className="bg-primary text-primary-foreground font-bold hover:brightness-110"
                       onClick={() => onStart(c.id)}
+                      disabled={!isConnected}
                     >
                       <Play className="w-3.5 h-3.5 mr-1 fill-current" />
                       Start
@@ -110,6 +119,7 @@ export function ContainersView({
                     size="sm"
                     variant="destructive"
                     onClick={() => onDelete(c)}
+                    disabled={!isConnected}
                   >
                     <Trash className="w-3.5 h-3.5 mr-1" />
                     Delete
