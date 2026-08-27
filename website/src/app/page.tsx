@@ -12,7 +12,7 @@ export default function LandingPage() {
       <Header releaseTag="v0.0.1" />
       <section className="relative pt-24 pb-16 px-6 max-w-6xl mx-auto text-center flex flex-col items-center">
         <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight max-w-4xl text-white">
-          The <span className="text-[#00ff66] text-glow-primary">Lightweight</span> Desktop Client for Docker.
+          The <span className="text-[#00ff66] text-glow-primary">Lightweight</span> Desktop Client for Docker
         </h1>
         <p className="mt-6 text-base sm:text-lg text-[#7b849b] max-w-2xl leading-relaxed">
           No cloud telemetry. No heavy Electron runtime. Just real-time kernel CPU metrics, live streaming logs, and instant container controls built with Go and Next.js.
